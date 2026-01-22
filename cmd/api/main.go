@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"api.drsb-purchase-service/config"
+	"api.drsb-purchase-service/internal/infrastructure/database"
 )
 
 //TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
@@ -17,5 +17,13 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	fmt.Printf("%s", cfg.DatabasePort())
+	db, err := database.NewPostgres(cfg.Database)
+	if err != nil {
+		log.Fatal("Failed to connect to database", err)
+	}
+	defer db.Close()
+
+	if err := database.RunMigrations(db); err != nil {
+		log.Fatal("Failed to run migrations", err)
+	}
 }
