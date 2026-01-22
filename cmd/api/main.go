@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"api.drsb-purchase-service/config"
+	"api.drsb-purchase-service/internal/infrastructure/cache"
 	"api.drsb-purchase-service/internal/infrastructure/database"
 )
 
@@ -26,4 +27,9 @@ func main() {
 	if err := database.RunMigrations(db); err != nil {
 		log.Fatal("Failed to run migrations", err)
 	}
+
+	// Initialize Redis cache
+	redisClient := cache.NewRedis(cfg.Redis)
+
+	defer redisClient.Close()
 }
