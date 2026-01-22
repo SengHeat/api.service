@@ -7,16 +7,18 @@ import (
 
 	"api.drsb-purchase-service/config"
 	"api.drsb-purchase-service/internal/domain/user"
+	"api.drsb-purchase-service/internal/infrastructure/cache"
 	"api.drsb-purchase-service/pkg/jwt"
 )
 
 type userService struct {
 	repo   user.Repository
 	config *config.Config
+	redis  *cache.Redis
 }
 
-func NewUserService(repo user.Repository, config *config.Config) user.Service {
-	return &userService{repo: repo, config: config}
+func NewUserService(repo user.Repository, config *config.Config, redis *cache.Redis) user.Service {
+	return &userService{repo: repo, config: config, redis: redis}
 }
 
 func (s userService) CreateUser(ctx context.Context, req *user.CreateUserRequest) (*user.User, error) {
@@ -52,12 +54,18 @@ func (s userService) CreateUser(ctx context.Context, req *user.CreateUserRequest
 }
 
 func (s userService) GetUser(ctx context.Context, id int) (*user.User, error) {
-	u, err := s.repo.FindById(ctx, id)
+	var u user.User
+	cacheKey := fmt.Sprintf("user:%d", id)
+
+	err := s.redis.Remember(ctx, cacheKey, 1*time.Minute, &u, func() (interface{}, error) {
+		return s.repo.FindById(ctx, id)
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, err
 	}
 
-	return u, nil
+	return &u, nil
 }
 
 func (s userService) GetUsers(ctx context.Context, page, pageSize int) ([]*user.User, int, error) {

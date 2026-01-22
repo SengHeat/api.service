@@ -23,7 +23,7 @@ func Setup(db *sql.DB, redis *cache.Redis /*,log *log.Logger*/, cfg *config.Conf
 	userRepo := repository.NewUserRepository(db)
 
 	// Initialize services
-	userService := service.NewUserService(userRepo, cfg)
+	userService := service.NewUserService(userRepo, cfg, redis)
 
 	// Initialize handlers
 	userHandler := user.NewHandler(userService)

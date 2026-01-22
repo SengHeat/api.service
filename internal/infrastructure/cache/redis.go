@@ -63,3 +63,27 @@ func (r *Redis) Exists(ctx context.Context, key string) (bool, error) {
 func (r *Redis) Close() error {
 	return r.client.Close()
 }
+
+func (r *Redis) Remember(ctx context.Context, key string, expiration time.Duration, dest interface{}, fetch func() (interface{}, error)) error {
+	// 1. Try to get from cache
+	err := r.Get(ctx, key, dest)
+	if err == nil {
+		return nil // Cache hit!
+	}
+
+	// 2. Cache miss: Fetch the data using the provided function
+	data, err := fetch()
+	if err != nil {
+		return err
+	}
+
+	// 3. Store the newly fetched data in cache
+	if err := r.Set(ctx, key, data, expiration); err != nil {
+		return fmt.Errorf("failed to cache key %s: %w", key, err)
+	}
+
+	// 4. Marshal/Unmarshal to ensure 'dest' is populated with the fresh data
+	// This is necessary because 'data' is the raw result from 'fetch'
+	bytes, _ := json.Marshal(data)
+	return json.Unmarshal(bytes, dest)
+}
