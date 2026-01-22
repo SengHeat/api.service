@@ -1,11 +1,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"api.drsb-purchase-service/config"
+	"api.drsb-purchase-service/internal/api/routes"
 	"api.drsb-purchase-service/internal/infrastructure/cache"
 	"api.drsb-purchase-service/internal/infrastructure/database"
+	//"api.drsb-purchase-service/pkg/logger"
 )
 
 //TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
@@ -17,6 +26,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	// Initialize logger
+	//log := logger.New(cfg.LogLevel)
 
 	db, err := database.NewPostgres(cfg.Database)
 	if err != nil {
@@ -32,4 +44,35 @@ func main() {
 	redisClient := cache.NewRedis(cfg.Redis)
 
 	defer redisClient.Close()
+
+	// Setup router with all dependencies
+	router := routes.Setup(db, redisClient, cfg)
+
+	// Create HTTP server
+	server := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		//log.Info(fmt.Sprintf("Server starting on port %s", cfg.Port))
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("Server failed to start", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown", err)
+	}
 }
